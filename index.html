@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Corrigés Interactifs - Enseignant</title>
+    <!-- Chargement des bibliothèques externes -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background-color: #f0fdf4; margin: 0; padding: 0; min-height: 100vh; }
+        .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .transition-all { transition: all 0.3s ease-in-out; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #a7f3d0; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #059669; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Composant personnalisé pour empêcher le conflit entre React et Lucide sur la manipulation du DOM
+        const Icon = ({ name, className }) => (
+            <span 
+                style={{ display: 'contents' }} 
+                dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}" class="${className || ''}"></i>` }} 
+            />
+        );
+
+        const App = () => {
+            const objectifs = [
+                'Situation-problème (Compétence 1)',
+                'Situation d\'application (Compétence 2)',
+                'Raisonnement (concepts)',
+                'Exercice de consolidation'
+            ];
+            const cycles = ['1er cycle du primaire', '2e cycle du primaire', '3e cycle du primaire'];
+            const competences = [
+                'Résoudre une situation-problème',
+                'Raisonner à l\'aide de concepts et de processus',
+                'Communiquer à l\'aide du langage mathématique'
+            ];
+            
+            const typesCorrige = [
+                { 
+                    id: 'onglets', 
+                    label: 'Structure par Onglets', 
+                    icon: 'layout-template',
+                    description: 'L\'app aura des onglets (Énoncé, Données, Stratégie, Calculs, Réponse) pour structurer la modélisation au tableau.' 
+                },
+                { 
+                    id: 'revelation', 
+                    label: 'Révélation Progressive', 
+                    icon: 'mouse-pointer-click',
+                    description: 'L\'app masquera les démarches et réponses derrière des boutons à cliquer, idéal pour interroger la classe avant d\'afficher la solution.' 
+                }
+            ];
+
+            const initialFormState = {
+                nomEcole: '',
+                objectif: objectifs[0],
+                cycle: '',
+                discipline: 'Mathématique',
+                competence: '',
+                typeCorrigeId: 'onglets',
+                etapesBoutons: false,
+                taskText: '',
+            };
+
+            const [formData, setFormData] = useState(initialFormState);
+            const [generatedPrompt, setGeneratedPrompt] = useState('');
+            const [copySuccess, setCopySuccess] = useState(false);
+            const [isVisible, setIsVisible] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
+            const resultRef = useRef(null);
+
+            useEffect(() => {
+                generatePrompt();
+            }, [formData]);
+
+            // Exécute lucide sur chaque rendu pour transformer les nouvelles balises <i> masquées dans les <span>
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            const generatePrompt = () => {
+                const isOnglets = formData.typeCorrigeId === 'onglets';
+                const nomEcole = formData.nomEcole || '[INSÉRER NOM DE L\'ÉCOLE]';
+
+                let prompt = `Agis comme un Expert en conception d’activités numériques éducatives.
+Il est IMPÉRATIF que ta réponse soit la création d'un CORRIGÉ INTERACTIF complet (un seul fichier contenant HTML, CSS/Tailwind et JavaScript) que je projetterai au tableau interactif pour corriger une tâche mathématique avec mes élèves.
+
+RÈGLES D'OR ABSOLUES :
+1. N'INVENTE AUCUN PROBLÈME. Tu dois te baser STRICTEMENT sur le matériel de référence fourni (le texte ci-dessous ou le document PDF/image que j'ai joint avec ce prompt). Ton rôle est de transformer ce document en une activité de correction interactive.
+2. RESPECT DU NOMBRE DE QUESTIONS : Le corrigé doit correspondre EXACTEMENT au document de référence. Respecte le nombre exact de questions, de numéros ou de sous-tâches présents dans la référence. Ne rajoute rien et n'oublie rien.
+3. ADAPTATION AU TYPE DE TÂCHE : Le format du corrigé DOIT impérativement refléter une tâche de type "${formData.objectif}". Adapte la structure pédagogique en fonction (ex: modélisation complète pour une situation-problème, ou étapes ciblées pour une situation d'application/raisonnement).
+
+CONTEXTE :
+- École : ${nomEcole}
+- Cycle/Niveau : ${formData.cycle || '[NON PRÉCISÉ]'}
+- Compétence visée : ${formData.competence || '[NON PRÉCISÉE]'}
+- Type de tâche : ${formData.objectif}
+
+MATÉRIEL DE RÉFÉRENCE (À transformer en corrigé) :
+"""
+${formData.taskText || '[UTILISE LE DOCUMENT PDF OU L\'IMAGE JOINT À CE PROMPT COMME MATÉRIEL DE BASE. EXTRAIS L\'ÉNONCÉ ET LA DÉMARCHE POUR CRÉER LE CORRIGÉ EXACT.]'}
+"""
+
+CAHIER DES CHARGES DU CORRIGÉ INTERACTIF :
+1. Format technique : Génère un SEUL bloc de code contenant un fichier HTML complet. Utilise Tailwind CSS (via script CDN) pour un design moderne, coloré et aéré. Utilise React (via CDN) ou du Vanilla JS propre pour l'interactivité. Ne crée AUCUN autre fichier. ⚠️ ATTENTION SYNTAXE REACT/BABEL : Si tu utilises React, tu DOIS obligatoirement remplacer les symboles mathématiques "<" par "&lt;" et ">" par "&gt;" dans ton code JSX (ou les encapsuler dans des accolades "{'<'}") pour éviter toute erreur de parsing Babel. CONSIGNE STRICTE : Toutes les options interactives, onglets, boutons ou autres éléments interactifs doivent IMPÉRATIVEMENT fonctionner sans failles.
+2. Design visuel (CRUCIAL) : Le look esthétique de l'application finale doit être PARFAIT, très coloré et visuellement stimulant pour des enfants. Intègre des ANIMATIONS de style JEU VIDÉO LUDIQUE (ex: éléments qui rebondissent, apparitions dynamiques "pop", confettis ou effets de célébration magiques à la fin, effets de survol amusants sur les boutons). L'interface doit être pensée pour la projection en classe (grandes polices, couleurs contrastées). Ajoute une belle en-tête avec "École : ${nomEcole}" et le titre de la tâche (déduit du document de référence).
+
+3. Interactivité et Structure Pédagogique :
+${isOnglets ? 
+`- Crée un système de NAVIGATION PAR ONGLETS bien visible en haut.
+- Les onglets doivent diviser la résolution pour guider la démarche des élèves :
+  📍 Onglet 1 : "La mission" (Rappel de l'énoncé extrait du document de façon claire).
+  📍 Onglet 2 : "Ce que je sais / Ce que je cherche" (Extraction des données importantes, avec des puces).
+  📍 Onglet 3 : "Ma stratégie" (Explication en mots des étapes à accomplir).
+  📍 Onglet 4 : "Démarche et Calculs" (La résolution mathématique étape par étape tirée du corrigé de référence).
+  📍 Onglet 5 : "Réponse finale" (La phrase de réponse complète).
+- Remplis chaque onglet avec le vrai contenu exact tiré du document de référence.` 
+: 
+`- Utilise un système de RÉVÉLATION PROGRESSIVE (Boutons interactifs).
+- L'interface doit présenter la résolution (basée fidèlement sur le document de référence) étape par étape verticalement.
+- Masque initialement les éléments clés (données, calculs, réponse finale) derrière de gros boutons stylisés (ex: "Découvrir la donnée", "Afficher le calcul", "Révéler la réponse").
+- Au clic, le bouton disparaît avec une transition fluide pour révéler le bloc d'information caché.
+- Cela me permettra de questionner les élèves et de les laisser réfléchir avant d'afficher la bonne méthode.`}
+
+4. Contenu Pédagogique de la solution :
+- L'activité DOIT être interactive.
+- La résolution doit être exacte, très détaillée, et 100% fidèle à la méthode attendue dans le document de référence.
+- Inclus des "Boîtes d'astuces de l'enseignant" (visuellement distinctes, avec une icône) pour expliquer *pourquoi* on choisit telle opération, ou pour souligner les pièges à éviter (unités, conversions, etc.).
+
+5. REPRÉSENTATIONS VISUELLES ET GÉOMÉTRIQUES (PRODUCTION OBLIGATOIRE ET STRICTE) :
+Tu dois IMPÉRATIVEMENT produire TOUS les supports visuels nécessaires à la bonne compréhension de la correction (exemples : droites, diagrammes, solides, plans cartésiens, angles, représentation de nombres, représentation de fractions, tableaux).
+Pour tout élément visuel généré :  
+- L'esthétique doit être IMPECCABLE et SANS AUCUNE ERREUR VISUELLE. Les représentations doivent être mathématiquement et visuellement exactes (ex: une fraction 3/4 doit montrer exactement 3 parts colorées sur 4 parts parfaitement égales, un angle de 90° doit être parfaitement droit, etc.).
+- Génère le code (SVG natif intégré) d'un diagramme géométriquement précis, respectant scrupuleusement les proportions et mesures.  
+- Affiche tous les éléments nécessaires : axes, sommets, angles, côtés, longueurs, lignes de construction.  
+- Utilise les notations mathématiques standards (noms des sommets, symbole d’angle, unités).  
+- Colore ou mets en évidence les éléments importants (ex: angles en rouge, polygone en bleu, fraction colorée, etc.).  
+- Adopte un style clair et éducatif, fond transparent ou blanc, annotations lisibles, haute résolution.  
+- Utilise un plan cartésien si nécessaire, avec échelles respectées.  
+- Utilise exclusivement du code SVG pur intégré dans le HTML pour garantir une netteté maximale et un affichage parfait au tableau.
+${formData.etapesBoutons ? `\n6. STRUCTURE PÉDAGOGIQUE (CONSIGNE STRICTE) :
+Tu dois IMPÉRATIVEMENT intégrer dans le corrigé interactif ces différents boutons (ou sections) pour guider les élèves : "La mission" - "Je sais/cherche" - "Stratégie" - "Démarche" - "Réponse".` : ''}
+
+Génère UNIQUEMENT le code de cette activité interactive prête à l'emploi. Le code doit être complet, fonctionnel et se terminer par un design soigné.`;
+
+                setGeneratedPrompt(prompt);
+            };
+
+            const handleGenerate = () => {
+                if (!formData.cycle) {
+                    setErrorMsg('⚠️ Veuillez sélectionner au moins un "Cycle ciblé" avant de créer le prompt.');
+                    return;
+                }
+                setErrorMsg('');
+                setIsVisible(true);
+                setTimeout(() => {
+                    resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            };
+
+            const handleReset = () => {
+                setFormData(initialFormState);
+                setIsVisible(false);
+                setErrorMsg('');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const handleCopy = () => {
+                const textArea = document.createElement("textarea");
+                textArea.value = generatedPrompt;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    setCopySuccess(true);
+                    setTimeout(() => setCopySuccess(false), 2000);
+                } catch (err) {}
+                document.body.removeChild(textArea);
+            };
+
+            const handleGenerateAndCopy = () => {
+                if (!formData.cycle) {
+                    setErrorMsg('⚠️ Veuillez sélectionner au moins un "Cycle ciblé" avant de copier le prompt.');
+                    return;
+                }
+                setErrorMsg('');
+                setIsVisible(true);
+                handleCopy();
+                setTimeout(() => {
+                    resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto p-4 md:p-6 font-sans text-slate-900">
+                    <header className="mb-8 text-center">
+                        <div className="inline-flex items-center justify-center p-4 bg-emerald-100 rounded-full mb-3 shadow-inner">
+                            <Icon name="presentation" className="text-emerald-600 w-10 h-10" />
+                        </div>
+                        <h1 className="text-3xl font-black text-emerald-800 tracking-tight">Générateur d'Activités Interactives</h1>
+                        <p className="text-emerald-600/80 font-medium mt-2">Créez un prompt IA pour coder une application de correction au tableau</p>
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                        <div className="bg-white p-6 rounded-3xl shadow-xl shadow-emerald-900/5 border border-emerald-100 space-y-6">
+                            
+                            <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center gap-4 transition-all focus-within:ring-2 focus-within:ring-emerald-400 focus-within:bg-white">
+                                <div className="p-2.5 bg-emerald-500 rounded-xl shadow-md">
+                                    <Icon name="school" className="text-white w-5 h-5" />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-1">Établissement scolaire</label>
+                                    <input 
+                                        type="text"
+                                        placeholder="Saisissez le nom de l'école..."
+                                        className="w-full bg-transparent border-none text-base outline-none font-bold text-slate-800 placeholder:text-emerald-300 placeholder:font-normal"
+                                        value={formData.nomEcole}
+                                        onChange={(e) => setFormData({...formData, nomEcole: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">Cycle ciblé</label>
+                                        <select 
+                                            className="w-full p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-semibold cursor-pointer transition-all"
+                                            value={formData.cycle}
+                                            onChange={(e) => setFormData({...formData, cycle: e.target.value})}
+                                        >
+                                            <option value="">-- Choisir --</option>
+                                            {cycles.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">Type de tâche</label>
+                                        <select 
+                                            className="w-full p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-semibold cursor-pointer transition-all"
+                                            value={formData.objectif}
+                                            onChange={(e) => setFormData({...formData, objectif: e.target.value})}
+                                        >
+                                            {objectifs.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">Compétence</label>
+                                        <select 
+                                            className="w-full p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white font-semibold cursor-pointer transition-all"
+                                            value={formData.competence}
+                                            onChange={(e) => setFormData({...formData, competence: e.target.value})}
+                                        >
+                                            <option value="">-- Choisir --</option>
+                                            {competences.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-3 uppercase tracking-wide">Interface de l'application générée</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {typesCorrige.map(t => (
+                                            <div 
+                                                key={t.id} 
+                                                onClick={() => setFormData({...formData, typeCorrigeId: t.id})}
+                                                className={`p-4 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${formData.typeCorrigeId === t.id ? 'border-emerald-500 bg-emerald-50 shadow-md scale-[1.02]' : 'border-slate-100 bg-slate-50 hover:border-emerald-200 hover:bg-white'}`}
+                                            >
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <Icon name={t.icon} className={`w-5 h-5 ${formData.typeCorrigeId === t.id ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                                    <span className={`text-xs font-black uppercase tracking-wide ${formData.typeCorrigeId === t.id ? 'text-emerald-800' : 'text-slate-600'}`}>{t.label}</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-500 leading-relaxed">{t.description}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-3 uppercase tracking-wide">Éléments à choisir</label>
+                                    <div 
+                                        className={`flex items-center gap-4 p-4 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${formData.etapesBoutons ? 'border-emerald-500 bg-emerald-50 shadow-md scale-[1.01]' : 'border-slate-100 bg-slate-50 hover:border-emerald-200 hover:bg-white'}`}
+                                        onClick={() => {
+                                            setFormData({...formData, etapesBoutons: !formData.etapesBoutons});
+                                        }}
+                                    >
+                                        <div className={`w-6 h-6 rounded-md flex items-center justify-center border-2 transition-all shrink-0 ${formData.etapesBoutons ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300'}`}>
+                                            {formData.etapesBoutons && <Icon name="check" className="w-4 h-4 text-white" />}
+                                        </div>
+                                        <div>
+                                            <span className={`text-xs font-black uppercase tracking-wide ${formData.etapesBoutons ? 'text-emerald-800' : 'text-slate-600'}`}>Étapes de résolution explicites</span>
+                                            <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">Forcer l'IA à créer les boutons : La mission - Je sais/cherche - Stratégie - Démarche - Réponse</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-emerald-700 mb-2 flex items-center gap-2 uppercase tracking-wide">
+                                        <Icon name="file-text" className="w-4 h-4" />
+                                        Texte de l'énoncé ou du corrigé (Optionnel si PDF/Image joint)
+                                    </label>
+                                    <textarea
+                                        placeholder="Collez ici le texte du problème ou de son corrigé... Si vous prévoyez de joindre un PDF directement dans l'IA, vous pouvez laisser ce champ vide."
+                                        className="w-full h-36 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none font-sans transition-all shadow-inner"
+                                        value={formData.taskText}
+                                        onChange={(e) => setFormData({...formData, taskText: e.target.value})}
+                                    />
+                                </div>
+
+                                {errorMsg && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold flex items-center gap-2">
+                                        {errorMsg}
+                                    </div>
+                                )}
+
+                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                    <button onClick={handleReset} className="px-6 py-4 bg-white text-slate-500 border-2 border-slate-200 rounded-2xl font-black text-xs uppercase hover:bg-slate-50 hover:text-slate-700 transition-all flex items-center justify-center gap-2 active:scale-95">
+                                        <Icon name="refresh-cw" className="w-4 h-4" /> Effacer
+                                    </button>
+                                    <div className="flex-1 flex gap-2">
+                                        <button 
+                                            onClick={handleGenerate}
+                                            className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg active:scale-95 shadow-emerald-600/30 flex items-center justify-center gap-2"
+                                        >
+                                            <Icon name="sparkles" className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="hidden sm:inline">Créer le Prompt</span><span className="sm:hidden">Créer</span>
+                                        </button>
+                                        <button 
+                                            onClick={handleGenerateAndCopy}
+                                            className={`flex-1 py-4 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 ${copySuccess ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-slate-800 hover:bg-slate-900 shadow-slate-800/30'}`}
+                                        >
+                                            <Icon name={copySuccess ? "check" : "copy"} className="w-4 h-4 sm:w-5 sm:h-5" /> {copySuccess ? 'Copié !' : <><span className="hidden sm:inline">Copier le Prompt</span><span className="sm:hidden">Copier</span></>}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div ref={resultRef} className={`flex flex-col transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20 pointer-events-none'}`} style={{ display: isVisible ? 'flex' : 'none' }}>
+                            <div className="bg-slate-900 rounded-3xl p-1 shadow-2xl overflow-hidden">
+                                <div className="bg-slate-800/50 rounded-[22px] p-5">
+                                    <div className="flex justify-between items-center mb-5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                                            <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                                            <span className="text-emerald-400/80 font-mono text-[10px] ml-2 uppercase tracking-widest flex items-center gap-2">
+                                                <Icon name="terminal" className="w-3 h-3" /> prompt_interactif.txt
+                                            </span>
+                                        </div>
+                                        <button onClick={handleCopy} className={`px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wide transition-all transform active:scale-90 flex items-center gap-2 ${copySuccess ? 'bg-emerald-500 text-white' : 'bg-white text-slate-900 hover:bg-slate-100 shadow-lg'}`}>
+                                            <Icon name={copySuccess ? "check" : "copy"} className="w-4 h-4" />
+                                            {copySuccess ? 'Copié !' : 'Copier le texte'}
+                                        </button>
+                                    </div>
+                                    <div className="bg-[#0f172a] border border-slate-700/50 rounded-xl p-5 shadow-inner max-h-[480px] overflow-auto custom-scrollbar relative group">
+                                        <pre className="text-emerald-50 text-[12px] whitespace-pre-wrap font-mono leading-relaxed opacity-90">
+                                            {generatedPrompt}
+                                        </pre>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="mt-6 p-5 bg-emerald-50 rounded-2xl border-2 border-emerald-100 flex items-start gap-4 shadow-sm">
+                                <div className="p-2.5 bg-emerald-600 rounded-xl shadow-md shrink-0">
+                                    <Icon name="bot" className="text-white w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h4 className="text-emerald-900 font-black text-xs uppercase mb-1.5 tracking-wide">Comment utiliser ce prompt ?</h4>
+                                    <p className="text-[12px] text-emerald-800/80 leading-relaxed font-medium">
+                                        Collez ce texte dans <strong className="text-emerald-700">Gemini</strong>, <strong className="text-emerald-700">ChatGPT (avec Canvas)</strong> ou <strong className="text-emerald-700">Claude (Artifacts)</strong>. L'IA générera automatiquement l'application web interactive que vous pourrez ouvrir en plein écran pour enseigner à vos élèves !
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        window.addEventListener('load', () => {
+            if (window.lucide) lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
